@@ -6,7 +6,9 @@ services:
     region: singapore
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
-    autoDeploy: true
+    # Deploy-button users opt in to updates manually instead of receiving every
+    # future commit from the source repository automatically.
+    autoDeployTrigger: off
     envVars:
       - key: DATABASE_URL
         fromDatabase:

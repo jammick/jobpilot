@@ -140,6 +140,8 @@ docker compose logs -f backend worker
 - `KNOWLEDGE_ADMIN_KEY`：你进入 `/developer` 时使用的管理密钥；
 - `EMBEDDING_API_KEY`：开发者维护的嵌入模型密钥，普通使用者不可见。
 
+线上实例默认关闭源仓库自动部署。需要升级版本时，在 Render 的 Blueprint 页面执行 `Manual Sync`，审核变更后再部署。
+
 默认嵌入地址是 `https://api.openai.com/v1`。若使用其他 OpenAI 兼容嵌入服务，请在 Render 环境变量中修改 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_DIMENSION`。
 
 部署成功后：
