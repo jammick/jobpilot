@@ -4314,3 +4314,34 @@ a {
     font-size: 8.5pt;
   }
 }
+.workspace-identity {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid rgba(20, 28, 24, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.workspace-identity small {
+  color: #68716b;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.workspace-reset-button {
+  width: fit-content;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid rgba(154, 54, 47, 0.2);
+  border-radius: 12px;
+  color: #913a35;
+  background: #fff7f6;
+  cursor: pointer;
+}
+
+.workspace-reset-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}

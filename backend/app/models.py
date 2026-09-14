@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from pgvector.sqlalchemy import Vector
 
@@ -21,6 +21,8 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -41,6 +43,9 @@ class Resume(Base):
     original_name: Mapped[str] = mapped_column(String(255))
     storage_name: Mapped[str] = mapped_column(String(255), unique=True)
     content: Mapped[str] = mapped_column(Text)
+    # Render's free filesystem is ephemeral. Keeping the original bytes in the
+    # database preserves PDF preview/download across restarts and redeploys.
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

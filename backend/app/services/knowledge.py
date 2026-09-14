@@ -20,12 +20,14 @@ logger = logging.getLogger(__name__)
 
 def _embeddings() -> OpenAIEmbeddings | None:
     settings = get_settings()
-    if not settings.openai_api_key:
+    api_key = settings.embedding_api_key or settings.openai_api_key
+    base_url = settings.embedding_base_url or settings.openai_base_url
+    if not api_key:
         return None
     return OpenAIEmbeddings(
         model=settings.embedding_model,
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
+        api_key=api_key,
+        base_url=base_url,
         max_retries=1,
     )
 
@@ -233,7 +235,9 @@ def published_profile(
     allow_archived: bool = False,
 ) -> tuple[KnowledgeBase, RoleProfile, list[CompetencyRule]]:
     statuses = ["published", "archived"] if allow_archived and role_profile_id else ["published"]
-    query = db.query(RoleProfile, KnowledgeBase).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(KnowledgeBase.user_id == user_id, KnowledgeBase.status.in_(statuses))
+    # Published role profiles are developer-owned global product knowledge.
+    # The caller's user_id scopes resumes and analyses, not the shared rules.
+    query = db.query(RoleProfile, KnowledgeBase).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(KnowledgeBase.status.in_(statuses))
     if role_profile_id:
         query = query.filter(RoleProfile.id == role_profile_id)
     item = query.order_by(KnowledgeBase.created_at.desc()).first()

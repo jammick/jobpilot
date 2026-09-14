@@ -1,13 +1,14 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.api.deps import CurrentUser, DB, KnowledgeAdmin
+from app.api.deps import CurrentUser, DB, KnowledgeAdmin, knowledge_owner
 from app.core.config import get_settings
 from app.core.security import create_token, hash_password, verify_password
 from app.models import AgentRun, Analysis, EvaluationRun, KnowledgeBase, KnowledgeChunk, KnowledgeDocument, OptimizationChange, OptimizationDraft, Resume, ResumeChunk, ResumeVersion, RoleProfile, User
@@ -26,7 +27,7 @@ router = APIRouter()
 def developer_status(db: DB, _: KnowledgeAdmin):
     settings = get_settings()
     dialect = db.get_bind().dialect.name
-    return {"database": dialect, "vector_database": dialect == "postgresql", "embedding_model": settings.embedding_model, "embedding_configured": bool(settings.openai_api_key), "task_mode": settings.task_mode, "queue_configured": settings.task_mode.lower() == "queue"}
+    return {"database": dialect, "vector_database": dialect == "postgresql", "embedding_model": settings.embedding_model, "embedding_configured": bool(settings.embedding_api_key or settings.openai_api_key), "task_mode": settings.task_mode, "queue_configured": settings.task_mode.lower() in {"queue", "thread"}}
 
 
 @router.get("/developer/observability")
@@ -111,7 +112,8 @@ def update_model_settings(payload: ModelSettingsUpdate, user: CurrentUser, db: D
 
 @router.get("/knowledge-bases", response_model=list[KnowledgeBaseSummary])
 def knowledge_bases(user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    return db.query(KnowledgeBase).filter_by(user_id=user.id).order_by(KnowledgeBase.created_at.desc()).all()
+    owner = knowledge_owner(db)
+    return db.query(KnowledgeBase).filter_by(user_id=owner.id).order_by(KnowledgeBase.created_at.desc()).all()
 
 
 @router.get("/role-profiles")
@@ -121,13 +123,14 @@ def role_profiles(user: CurrentUser, db: DB):
     Knowledge documents, rules, weights and developer controls remain behind
     the knowledge-admin dependency.
     """
-    rows = db.query(RoleProfile, KnowledgeBase).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(KnowledgeBase.user_id == user.id, KnowledgeBase.status == "published").order_by(KnowledgeBase.created_at.desc()).all()
+    rows = db.query(RoleProfile, KnowledgeBase).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(KnowledgeBase.status == "published").order_by(KnowledgeBase.created_at.desc()).all()
     return [{"id": profile.id, "name": profile.name, "role_key": profile.role_key, "knowledge_base_id": base.id, "version": base.version} for profile, base in rows]
 
 
 @router.get("/knowledge-bases/{base_id}", response_model=KnowledgeBaseDetail)
 def knowledge_base(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=user.id).first()
+    owner = knowledge_owner(db)
+    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=owner.id).first()
     if not base:
         raise HTTPException(404, "知识包不存在")
     count = db.query(func.count(KnowledgeDocument.id)).filter_by(knowledge_base_id=base.id).scalar() or 0
@@ -136,7 +139,8 @@ def knowledge_base(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
 
 @router.get("/knowledge-bases/{base_id}/insights")
 def knowledge_insights(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=user.id).first()
+    owner = knowledge_owner(db)
+    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=owner.id).first()
     if not base:
         raise HTTPException(404, "知识包不存在")
     chunks = db.query(KnowledgeChunk).filter_by(knowledge_base_id=base.id).all()
@@ -146,7 +150,8 @@ def knowledge_insights(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmi
 
 @router.post("/knowledge-bases/{base_id}/search")
 def search_knowledge(base_id: str, payload: KnowledgeSearchInput, user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=user.id).first()
+    owner = knowledge_owner(db)
+    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=owner.id).first()
     if not base:
         raise HTTPException(404, "知识包不存在")
     mode, results = search_knowledge_chunks(db, base.id, payload.query, payload.limit)
@@ -155,14 +160,16 @@ def search_knowledge(base_id: str, payload: KnowledgeSearchInput, user: CurrentU
 
 @router.post("/knowledge-bases/import", response_model=KnowledgeBaseDetail, status_code=201)
 async def import_base(manifest: UploadFile, user: CurrentUser, db: DB, _: KnowledgeAdmin, documents: list[UploadFile] | None = None):
-    base = await import_knowledge_base(db, user.id, manifest, documents or [])
+    owner = knowledge_owner(db)
+    base = await import_knowledge_base(db, owner.id, manifest, documents or [])
     count = db.query(func.count(KnowledgeDocument.id)).filter_by(knowledge_base_id=base.id).scalar() or 0
     return knowledge_detail(base, count)
 
 
 @router.post("/knowledge-bases/{base_id}/validate", response_model=KnowledgeBaseDetail)
 def validate_base(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=user.id).first()
+    owner = knowledge_owner(db)
+    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=owner.id).first()
     if not base:
         raise HTTPException(404, "知识包不存在")
     count = db.query(func.count(KnowledgeDocument.id)).filter_by(knowledge_base_id=base.id).scalar() or 0
@@ -171,10 +178,11 @@ def validate_base(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
 
 @router.post("/knowledge-bases/{base_id}/publish", response_model=KnowledgeBaseDetail)
 def publish_base(base_id: str, user: CurrentUser, db: DB, _: KnowledgeAdmin):
-    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=user.id).first()
+    owner = knowledge_owner(db)
+    base = db.query(KnowledgeBase).filter_by(id=base_id, user_id=owner.id).first()
     if not base:
         raise HTTPException(404, "知识包不存在")
-    base = publish_knowledge_base(db, user.id, base)
+    base = publish_knowledge_base(db, owner.id, base)
     count = db.query(func.count(KnowledgeDocument.id)).filter_by(knowledge_base_id=base.id).scalar() or 0
     return knowledge_detail(base, count)
 
@@ -205,10 +213,36 @@ def login(payload: LoginInput, db: DB):
 def me(user: CurrentUser): return user
 
 
+@router.get("/workspace")
+def workspace(user: CurrentUser):
+    """Expose only a short support code, never the anonymous identity token."""
+    return {
+        "mode": "anonymous" if user.is_anonymous else "local",
+        "workspace_code": user.id.split("-")[0].upper(),
+        "expires_at": user.expires_at,
+    }
+
+
+@router.delete("/workspace", status_code=204)
+def clear_workspace(user: CurrentUser, db: DB):
+    settings = get_settings()
+    if not settings.anonymous_workspace_mode or not user.is_anonymous:
+        raise HTTPException(409, "本地工作区无需重置")
+    for resume in db.query(Resume).filter_by(user_id=user.id).all():
+        path = settings.upload_dir / resume.storage_name
+        if path.is_file():
+            path.unlink()
+    db.delete(user)
+    db.commit()
+    response = Response(status_code=204)
+    response.delete_cookie(settings.workspace_cookie_name, path="/")
+    return response
+
+
 @router.post("/resumes", response_model=ResumeResponse, status_code=201)
 async def upload_resume(file: UploadFile, user: CurrentUser, db: DB):
-    storage_name, content = await save_and_extract(file)
-    resume = Resume(user_id=user.id, original_name=file.filename or "resume", storage_name=storage_name, content=content)
+    storage_name, content, raw = await save_and_extract(file)
+    resume = Resume(user_id=user.id, original_name=file.filename or "resume", storage_name=storage_name, content=content, file_data=raw)
     db.add(resume); db.flush(); index_resume(db, resume); db.commit(); db.refresh(resume)
     return resume
 
@@ -220,8 +254,8 @@ async def upload_resumes(files: list[UploadFile], user: CurrentUser, db: DB):
     imported, rejected = [], []
     for file in files:
         try:
-            storage_name, content = await save_and_extract(file)
-            resume = Resume(user_id=user.id, original_name=file.filename or "resume", storage_name=storage_name, content=content)
+            storage_name, content, raw = await save_and_extract(file)
+            resume = Resume(user_id=user.id, original_name=file.filename or "resume", storage_name=storage_name, content=content, file_data=raw)
             db.add(resume); db.flush(); index_resume(db, resume); db.commit(); db.refresh(resume)
             imported.append(resume)
         except HTTPException as exc:
@@ -262,18 +296,24 @@ def resume_detail(resume_id: str, user: CurrentUser, db: DB):
 def resume_file(resume_id: str, user: CurrentUser, db: DB):
     resume = owned_resume(resume_id, user, db)
     path = get_settings().upload_dir / resume.storage_name
-    if not path.is_file():
+    if not path.is_file() and resume.file_data is None:
         raise HTTPException(404, "简历源文件不存在")
     media_type = (
         "application/pdf"
         if Path(resume.original_name).suffix.lower() == ".pdf"
         else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
-    return FileResponse(
-        path=path,
+    if path.is_file():
+        return FileResponse(
+            path=path,
+            media_type=media_type,
+            filename=resume.original_name,
+            content_disposition_type="inline",
+        )
+    return Response(
+        content=resume.file_data,
         media_type=media_type,
-        filename=resume.original_name,
-        content_disposition_type="inline",
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(resume.original_name)}"},
     )
 
 
@@ -354,7 +394,7 @@ def create_analysis(payload: AnalysisCreate, user: CurrentUser, db: DB):
     resume = db.query(Resume).filter_by(id=payload.resume_id, user_id=user.id).first()
     if not resume: raise HTTPException(404, "简历不存在")
     if payload.role_profile_id:
-        valid_profile = db.query(RoleProfile).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(RoleProfile.id == payload.role_profile_id, KnowledgeBase.user_id == user.id, KnowledgeBase.status == "published").first()
+        valid_profile = db.query(RoleProfile).join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id).filter(RoleProfile.id == payload.role_profile_id, KnowledgeBase.status == "published").first()
         if not valid_profile:
             raise HTTPException(422, "目标岗位能力模型不存在或尚未发布")
     analysis = Analysis(user_id=user.id, resume_id=resume.id, role_profile_id=payload.role_profile_id, job_description=payload.job_description)

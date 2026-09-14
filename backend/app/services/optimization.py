@@ -71,7 +71,7 @@ def _published_skill_terms(db: Session, user_id: str) -> set[str]:
         db.query(SkillAlias.alias)
         .join(Skill, SkillAlias.skill_id == Skill.id)
         .join(KnowledgeBase, Skill.knowledge_base_id == KnowledgeBase.id)
-        .filter(KnowledgeBase.user_id == user_id, KnowledgeBase.status == "published")
+        .filter(KnowledgeBase.status == "published")
         .all()
     )
     return {alias for (alias,) in rows}

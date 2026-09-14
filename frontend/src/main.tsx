@@ -24,6 +24,7 @@ import {
   optimizations,
   resumes,
   settings,
+  workspace,
   type Analysis,
   type BatchUploadResult,
   type KnowledgeBase,
@@ -670,6 +671,18 @@ function Settings() {
     [chat, setChat] = useState(""),
     [provider, setProvider] = useState("custom"),
     [showNewKey, setShowNewKey] = useState(false);
+  const workspaceQuery = useQuery({
+    queryKey: ["workspace"],
+    queryFn: () => workspace.current().then((response) => response.data),
+    retry: false,
+  });
+  const clearWorkspace = useMutation({
+    mutationFn: () => workspace.clear(),
+    onSuccess: () => {
+      localStorage.removeItem("jobpilot_token");
+      window.location.assign("/");
+    },
+  });
   const save = useMutation({
     mutationFn: () =>
       settings.updateModel(
@@ -795,6 +808,33 @@ function Settings() {
           <div>
             <b>提示</b>{" "}
             对话模型配置会同步给后台 Agent 任务；嵌入模型与知识库仍由开发者管理。
+          </div>
+          <div className="workspace-identity">
+            <p className="eyebrow">PRIVATE WORKSPACE</p>
+            <b>
+              {workspaceQuery.data?.mode === "anonymous"
+                ? `匿名工作区 ${workspaceQuery.data.workspace_code}`
+                : "本机私有工作区"}
+            </b>
+            <small>
+              {workspaceQuery.data?.mode === "anonymous"
+                ? "资料只属于当前浏览器；其他电脑和浏览器无法查看。"
+                : "当前为本地 Docker 模式，数据仅保存在这台电脑。"}
+            </small>
+            {workspaceQuery.data?.mode === "anonymous" && (
+              <button
+                type="button"
+                className="workspace-reset-button"
+                disabled={clearWorkspace.isPending}
+                onClick={() => {
+                  if (window.confirm("清空当前工作区的简历、分析和模型设置？此操作无法撤销。")) {
+                    clearWorkspace.mutate();
+                  }
+                }}
+              >
+                {clearWorkspace.isPending ? "正在清空…" : "清空当前工作区"}
+              </button>
+            )}
           </div>
         </aside>
       </section>

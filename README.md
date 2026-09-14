@@ -1,14 +1,14 @@
 # JobPilot
 
-一个本地优先、开源、免登录的岗位匹配与简历定向优化 Agent。
+一个开源、免登录、支持本地私有运行与匿名工作区隔离的岗位匹配和简历定向优化 Agent。
 
 JobPilot 接收 PDF/DOCX 简历和岗位 JD，通过岗位知识规则、简历原文证据与 LangGraph 工作流，生成可解释的匹配评分、能力缺口、面试准备建议和事实受限的简历优化草稿。
 
-> 当前版本面向“每位使用者在自己的电脑运行 Docker”的单机私密工作区。不同电脑拥有各自的数据库、文件和模型配置，互不影响。请勿在未增加匿名工作区隔离前，将当前单工作区模式直接部署为多人共享的公网服务。
+本地 Docker 模式的数据只存在本机；公网模式会为每个浏览器自动创建匿名工作区，不同电脑与浏览器之间的简历、分析、优化版本和 Chat LLM 配置互不可见。
 
 ## 核心特点
 
-- **免登录、本地优先**：打开本机页面即可使用，简历和报告保存在本机 Docker Volume 中。
+- **免登录且隔离**：本地模式使用本机工作区，公网模式使用签名 HttpOnly Cookie 建立匿名工作区。
 - **证据驱动评分**：每个得分项必须关联可定位的简历原文，LLM 不直接决定分数。
 - **跨岗位适配**：明确命中已发布岗位模型时使用专业规则，否则进入 JD 自适应评分。
 - **硬门槛机制**：缺失必需能力时按确定性规则封顶，并展示封顶原因。
@@ -49,7 +49,7 @@ flowchart LR
     Worker --> Graph[LangGraph 单 Agent]
     Graph --> DB
     Graph --> Provider[OpenAI 兼容模型 API]
-    API --> Files[(Docker 文件卷)]
+    API --> Files[(本地文件卷 / 数据库源文件)]
 ```
 
 | 层级 | 技术 |
@@ -100,6 +100,7 @@ cp .env.example .env
 JWT_SECRET=请替换为高强度随机字符串
 POSTGRES_PASSWORD=请替换为高强度随机数据库密码
 KNOWLEDGE_ADMIN_KEY=请替换为高强度随机管理密钥
+MODEL_CONFIG_ENCRYPTION_KEY=请替换为另一条高强度随机字符串
 LOCAL_WORKSPACE_MODE=true
 ```
 
@@ -129,6 +130,31 @@ docker compose ps
 ```bash
 docker compose logs -f backend worker
 ```
+
+## 一键部署到 Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jammick/jobpilot)
+
+仓库根目录的 `render.yaml` 会创建一个 Web Service 和 PostgreSQL，并在同一容器中运行 React、FastAPI 和单线程异步任务执行器。部署时只需要填写：
+
+- `KNOWLEDGE_ADMIN_KEY`：你进入 `/developer` 时使用的管理密钥；
+- `EMBEDDING_API_KEY`：开发者维护的嵌入模型密钥，普通使用者不可见。
+
+默认嵌入地址是 `https://api.openai.com/v1`。若使用其他 OpenAI 兼容嵌入服务，请在 Render 环境变量中修改 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_DIMENSION`。
+
+部署成功后：
+
+1. 打开 Render 分配的网址，确认首页和 `/health` 可访问；
+2. 进入 `/developer`，输入 `KNOWLEDGE_ADMIN_KEY`；
+3. 导入并发布 `backend/app/seed/ai-product-manager-v2.json`；
+4. 普通使用者在“模型设置”中填写自己的 Chat LLM；
+5. 用普通窗口与无痕窗口分别访问，设置页会显示不同的匿名工作区编号，数据互不影响。
+
+### Render 免费方案边界
+
+Render 不会改变评分、分析、PDF 预览或用户隔离逻辑，但免费资源适合演示而非长期生产：Web Service 空闲后会休眠并产生冷启动；免费 PostgreSQL 容量为 1 GB，创建 30 天后到期，且没有备份。JobPilot 已将原始 PDF/DOCX 同步保存到 PostgreSQL，因此 Web Service 重启后仍可预览，但数据库到期仍会导致数据丢失。正式长期上线时应升级数据库或改用长期数据库与对象存储。
+
+匿名隔离以浏览器 Cookie 为边界：不同电脑、不同浏览器和无痕窗口互相隔离；清除 Cookie 后会失去原工作区访问权。匿名工作区默认 30 天过期，可在“模型设置”查看编号并主动清空。
 
 ### 4. 配置模型
 
@@ -189,7 +215,7 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSION=1536
 ```
 
-当前实现中 Chat LLM 的系统兜底与嵌入模型共用 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。页面模型配置只覆盖 Chat LLM，不会改变嵌入模型。
+推荐使用独立的 `EMBEDDING_API_KEY` 与 `EMBEDDING_BASE_URL`。为兼容旧版本地配置，这两个值为空时才回退到 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。页面模型配置只覆盖当前匿名工作区的 Chat LLM，不会改变开发者的嵌入模型。
 
 如果不配置系统 API Key：
 
@@ -275,6 +301,8 @@ curl.exe -X POST "http://localhost:8000/api/knowledge-bases/$baseId/publish" `
 | `uploads` | 原始 PDF/DOCX 文件 |
 
 删除简历时，服务端会同步删除关联分析数据、文本片段、向量记录和物理文件。
+
+公网匿名模式中，服务端通过签名且 `HttpOnly` 的工作区 Cookie 解析内部用户 ID，所有业务查询仍强制附带该 ID。原始文件同时保存在数据库中，用于无持久磁盘平台上的 PDF 预览恢复；岗位知识包归开发者所有，只向普通工作区暴露已发布岗位模型的安全元数据。
 
 停止容器不会删除数据：
 

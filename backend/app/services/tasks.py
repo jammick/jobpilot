@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from redis import Redis
@@ -14,6 +15,7 @@ from app.models import Analysis, EvaluationRun, Resume
 from app.services.analysis import run_analysis
 
 logger = logging.getLogger(__name__)
+thread_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="jobpilot-agent")
 
 
 class QueueUnavailableError(RuntimeError):
@@ -30,6 +32,13 @@ def dispatch_analysis(
     settings = get_settings()
     if settings.task_mode.lower() == "inline":
         run_analysis_job(analysis_id, role_profile_id, allow_archived_profile)
+        return
+    if settings.task_mode.lower() == "thread":
+        # A single background thread keeps the Render free deployment to one
+        # process while preserving the asynchronous queued/running UI flow.
+        thread_executor.submit(
+            run_analysis_job, analysis_id, role_profile_id, allow_archived_profile
+        )
         return
     try:
         connection = Redis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)
@@ -112,6 +121,9 @@ def dispatch_evaluation(evaluation_id: str) -> None:
     settings = get_settings()
     if settings.task_mode.lower() == "inline":
         run_evaluation_job(evaluation_id)
+        return
+    if settings.task_mode.lower() == "thread":
+        thread_executor.submit(run_evaluation_job, evaluation_id)
         return
     try:
         connection = Redis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)

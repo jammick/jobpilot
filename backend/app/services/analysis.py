@@ -339,7 +339,7 @@ def _auto_published_profile(
     candidates = (
         db.query(RoleProfile, KnowledgeBase)
         .join(KnowledgeBase, RoleProfile.knowledge_base_id == KnowledgeBase.id)
-        .filter(KnowledgeBase.user_id == user_id, KnowledgeBase.status == "published")
+        .filter(KnowledgeBase.status == "published")
         .order_by(KnowledgeBase.created_at.desc())
         .all()
     )

@@ -1,6 +1,8 @@
 import axios from "axios";
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
+  withCredentials: true,
+  headers: { "X-JobPilot-Client": "web" },
 });
 api.interceptors.request.use((c) => {
   const t = localStorage.getItem("jobpilot_token");
@@ -194,6 +196,15 @@ export const auth = {
   login: (email: string, password: string) =>
     api.post("/auth/login", { email, password }),
   me: () => api.get("/auth/me"),
+};
+export type Workspace = {
+  mode: "local" | "anonymous";
+  workspace_code: string;
+  expires_at?: string;
+};
+export const workspace = {
+  current: () => api.get<Workspace>("/workspace"),
+  clear: () => api.delete("/workspace"),
 };
 export const resumes = {
   all: () => api.get<Resume[]>("/resumes"),

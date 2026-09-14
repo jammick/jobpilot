@@ -23,7 +23,7 @@ def extract_text(raw: bytes, suffix: str) -> str:
     return text.strip()
 
 
-async def save_and_extract(upload: UploadFile) -> tuple[str, str]:
+async def save_and_extract(upload: UploadFile) -> tuple[str, str, bytes]:
     suffix = Path(upload.filename or "").suffix.lower()
     if suffix not in ALLOWED:
         raise HTTPException(status_code=400, detail="仅支持 PDF 或 DOCX 格式")
@@ -41,4 +41,4 @@ async def save_and_extract(upload: UploadFile) -> tuple[str, str]:
     storage_name = f"{uuid.uuid4()}{suffix}"
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
     (settings.upload_dir / storage_name).write_bytes(raw)
-    return storage_name, text.strip()
+    return storage_name, text.strip(), raw

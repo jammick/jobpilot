@@ -35,7 +35,10 @@ def _cipher() -> Fernet:
     # The encryption root stays outside the database in JWT_SECRET. Production
     # deployments should provide a dedicated, high-entropy JWT secret.
     material = hashlib.sha256(
-        ("jobpilot:model-config:" + get_settings().jwt_secret).encode("utf-8")
+        (
+            "jobpilot:model-config:"
+            + (get_settings().model_config_encryption_key or get_settings().jwt_secret)
+        ).encode("utf-8")
     ).digest()
     return Fernet(base64.urlsafe_b64encode(material))
 
@@ -49,15 +52,14 @@ def user_llm_config(db: Session, user_id: str) -> LLMConfig:
     row = db.get(UserModelConfig, user_id)
     if not row:
         return system_llm_config()
-    fallback = system_llm_config()
     try:
         api_key = _cipher().decrypt(row.encrypted_api_key.encode("utf-8")).decode("utf-8") if row.encrypted_api_key else None
     except (InvalidToken, ValueError):
         # A rotated server secret deliberately invalidates old encrypted keys.
         api_key = None
-    # A user may change only the provider/model and intentionally leave the
-    # key field blank. In that case retain the deployment fallback key.
-    return LLMConfig(api_key or fallback.api_key, row.base_url, row.chat_model)
+    # Once a workspace has its own row, the configuration is atomic. Never
+    # combine a developer fallback key with a visitor-selected provider URL.
+    return LLMConfig(api_key, row.base_url, row.chat_model)
 
 
 def save_user_llm_config(
