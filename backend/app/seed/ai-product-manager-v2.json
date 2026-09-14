@@ -1,0 +1,172 @@
+{
+  "name": "AI 产品经理能力模型（开源本体增强草稿）",
+  "role_key": "ai_product_manager",
+  "version": "2.0.0-draft",
+  "role_name": "AI 产品经理",
+  "sources": [
+    {
+      "id": "esco_v121",
+      "name": "European Skills, Competences, Qualifications and Occupations (ESCO) v1.2.1",
+      "url": "https://esco.ec.europa.eu/en/use-esco",
+      "license": "EU Linked Open Data; review reuse terms",
+      "note": "提供职业、技能、知识和能力关系；用于通用产品与职业能力词汇参考。"
+    },
+    {
+      "id": "onet_31",
+      "name": "O*NET Database 31.0",
+      "url": "https://www.onetcenter.org/database.html",
+      "license": "Creative Commons; review attribution requirements",
+      "note": "提供职业任务、技能、知识和能力重要性数据；用于职责与能力表达参考。"
+    },
+    {
+      "id": "mind_tech_ontology",
+      "name": "MIND Tech Skills & Concepts Ontology",
+      "url": "https://github.com/MIND-TechAI/MIND-tech-ontology",
+      "license": "MIT",
+      "note": "提供技术技能、别名和技能关系；用于 AI/软件技术术语规范化。"
+    },
+    {
+      "id": "jobpilot_curation",
+      "name": "JobPilot AI 产品经理规则编审",
+      "url": "https://github.com/",
+      "license": "Internal curation",
+      "note": "硬门槛、权重、中文别名和 AI 产品岗位适配由项目规则编审；不由外部本体自动决定。"
+    }
+  ],
+  "skills": [
+    {
+      "name": "产品策略",
+      "aliases": ["产品规划", "产品战略", "产品路线图", "product strategy"],
+      "category": "product",
+      "source_ids": ["esco_v121", "onet_31", "jobpilot_curation"]
+    },
+    {
+      "name": "用户研究",
+      "aliases": ["用户访谈", "需求调研", "客户研究", "customer research"],
+      "category": "product",
+      "source_ids": ["esco_v121", "onet_31"]
+    },
+    {
+      "name": "需求管理",
+      "aliases": ["需求分析", "PRD", "产品需求文档", "用户故事", "requirements management"],
+      "category": "product",
+      "source_ids": ["esco_v121", "onet_31"]
+    },
+    {
+      "name": "大语言模型应用",
+      "aliases": ["LLM", "大语言模型", "AIGC", "生成式 AI", "GPT", "ChatGPT", "Transformer"],
+      "category": "ai",
+      "source_ids": ["mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "name": "RAG",
+      "aliases": ["检索增强生成", "知识库问答", "LangChain", "LlamaIndex", "retrieval augmented generation"],
+      "category": "ai",
+      "source_ids": ["mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "name": "向量检索",
+      "aliases": ["向量数据库", "vector database", "Milvus", "Pinecone", "pgvector", "FAISS"],
+      "category": "ai",
+      "source_ids": ["mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "name": "提示词设计",
+      "aliases": ["提示词工程", "prompt engineering", "系统提示词", "prompt"],
+      "category": "ai",
+      "source_ids": ["mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "name": "AI 评测",
+      "aliases": ["模型评测", "LLM 评测", "离线评估", "幻觉评测", "AI 质量"],
+      "category": "ai",
+      "source_ids": ["jobpilot_curation"]
+    },
+    {
+      "name": "产品交付",
+      "aliases": ["项目管理", "跨团队协作", "敏捷开发", "Scrum", "产品上线"],
+      "category": "delivery",
+      "source_ids": ["esco_v121", "onet_31"]
+    },
+    {
+      "name": "数据分析",
+      "aliases": ["数据驱动", "指标体系", "漏斗分析", "BI", "data analysis"],
+      "category": "data",
+      "source_ids": ["onet_31", "mind_tech_ontology"]
+    },
+    {
+      "name": "实验与 SQL",
+      "aliases": ["SQL", "A/B 测试", "AB 测试", "实验设计", "显著性检验"],
+      "category": "data",
+      "source_ids": ["onet_31", "mind_tech_ontology"]
+    },
+    {
+      "name": "商业理解",
+      "aliases": ["商业化", "增长", "行业研究", "市场分析", "用户价值"],
+      "category": "business",
+      "source_ids": ["esco_v121", "onet_31"]
+    },
+    {
+      "name": "学历资格",
+      "aliases": ["本科", "硕士", "博士", "bachelor", "master"],
+      "category": "education",
+      "source_ids": ["esco_v121", "jobpilot_curation"]
+    }
+  ],
+  "rules": [
+    {
+      "key": "product_strategy",
+      "name": "产品策略与需求洞察",
+      "weight": 25,
+      "required": true,
+      "skills": ["产品策略", "用户研究", "需求管理"],
+      "description": "能定义用户问题、需求优先级和产品方向，并将调研转化为可执行需求。",
+      "source_ids": ["esco_v121", "onet_31", "jobpilot_curation"]
+    },
+    {
+      "key": "ai_literacy",
+      "name": "LLM/RAG 与 AI 技术理解",
+      "weight": 25,
+      "required": true,
+      "skills": ["大语言模型应用", "RAG", "向量检索", "提示词设计", "AI 评测"],
+      "description": "理解大模型能力边界、RAG/检索链路、提示词设计和质量评测；不因只出现工具名而判定完全匹配。",
+      "source_ids": ["mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "key": "delivery",
+      "name": "产品交付与跨团队协作",
+      "weight": 20,
+      "required": false,
+      "skills": ["产品交付"],
+      "description": "能推动从需求到上线的协作、节奏管理和交付。",
+      "source_ids": ["esco_v121", "onet_31", "jobpilot_curation"]
+    },
+    {
+      "key": "outcomes",
+      "name": "项目成果与量化意识",
+      "weight": 15,
+      "required": false,
+      "skills": ["数据分析", "实验与 SQL"],
+      "description": "能以指标、实验或可验证结果表达项目价值。",
+      "source_ids": ["onet_31", "mind_tech_ontology", "jobpilot_curation"]
+    },
+    {
+      "key": "business",
+      "name": "用户与商业理解",
+      "weight": 10,
+      "required": false,
+      "skills": ["商业理解"],
+      "description": "理解用户、行业、增长或商业目标。",
+      "source_ids": ["esco_v121", "onet_31", "jobpilot_curation"]
+    },
+    {
+      "key": "education",
+      "name": "教育与补充资格",
+      "weight": 5,
+      "required": false,
+      "skills": ["学历资格"],
+      "description": "包含学历或岗位相关资格信息。",
+      "source_ids": ["esco_v121", "jobpilot_curation"]
+    }
+  ]
+}

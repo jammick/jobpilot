@@ -1,0 +1,28 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.3
+pgvector==0.3.6
+pydantic-settings==2.7.0
+email-validator==2.2.0
+python-multipart==0.0.20
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+pypdf==5.1.0
+python-docx==1.1.2
+langchain==0.3.14
+langchain-openai==0.2.14
+langchain-text-splitters==0.3.4
+langgraph==0.2.62
+PyYAML==6.0.2
+pytest==8.3.4
+httpx==0.28.1
+# Redis 6.x does not support redis-py's CLIENT SETINFO handshake used by 5.x.
+# Keep the queue client compatible with the pinned Docker Redis service.
+redis==4.6.0
+rq==2.1.0
+# RQ 2.1's CLI declares duplicate serializer options with Click 8.2+.
+click==8.1.7
+cryptography==44.0.3

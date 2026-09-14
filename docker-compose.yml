@@ -1,0 +1,70 @@
+services:
+  postgres:
+    build:
+      context: ./postgres
+      args:
+        POSTGRES_IMAGE: ${POSTGRES_IMAGE:-mcr.microsoft.com/azurelinux/base/postgres:16.15-1-azl3.0.20260909}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jobpilot
+      POSTGRES_USER: jobpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobpilot}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobpilot -d jobpilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: ${REDIS_IMAGE:-mcr.microsoft.com/cbl-mariner/base/redis:6.2.20-1-cm2.0.20260311}
+    restart: unless-stopped
+    # Redis is not published to the host. Disable protected mode so the backend
+    # and worker can reach it over this private Compose network.
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "no"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://jobpilot:${POSTGRES_PASSWORD:-jobpilot}@postgres:5432/jobpilot
+      TASK_MODE: queue
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    volumes: [uploads:/app/uploads]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["rq", "worker", "jobpilot", "--url", "redis://redis:6379/0"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://jobpilot:${POSTGRES_PASSWORD:-jobpilot}@postgres:5432/jobpilot
+      TASK_MODE: queue
+      REDIS_URL: redis://redis:6379/0
+    volumes: [uploads:/app/uploads]
+    depends_on:
+      backend: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports: ["5173:80"]
+    depends_on:
+      backend: {condition: service_healthy}
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:

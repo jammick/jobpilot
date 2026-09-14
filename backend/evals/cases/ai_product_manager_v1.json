@@ -1,0 +1,94 @@
+{
+  "dataset_version": "1.0.0",
+  "knowledge_package": "app/seed/ai-product-manager-v1.json",
+  "base_jd": "AI 产品经理\n必须具备产品规划能力，理解 RAG 和 LLM。\n有跨团队协作、指标分析、用户研究经验者优先。\n本科优先。",
+  "evidence_library": {
+    "product_strategy": [
+      "负责需求分析与产品规划，完成需求优先级梳理。",
+      "主导产品策略制定，通过用户反馈明确产品方向。",
+      "负责需求洞察，设计产品规划并推动评审。"
+    ],
+    "ai_literacy": [
+      "基于 LangChain 搭建知识库问答，并设计 LLM 提示词验证大模型边界。",
+      "使用向量数据库实现 RAG，负责 GPT 应用方案设计。",
+      "搭建检索增强生成流程，完成生成式 AI 产品验证。"
+    ],
+    "delivery": [
+      "负责项目管理，推动跨团队协作并完成产品上线。",
+      "主导敏捷迭代，协调研发与设计完成产品交付。",
+      "参与跨团队协作，推动版本按期上线。"
+    ],
+    "outcomes": [
+      "通过 A/B 测试和指标分析优化方案，转化率提升 18%。",
+      "使用 SQL 验证核心指标，使处理效率提升 30%。",
+      "负责数据分析与效果指标复盘，用户留存提升 12%。"
+    ],
+    "business": [
+      "开展用户研究并制定商业化方案，验证目标用户价值。",
+      "负责增长实验与行业研究，完成商业目标拆解。",
+      "主导用户研究，推动商业化路径验证。"
+    ],
+    "education": [
+      "本科学历。",
+      "硕士学历。",
+      "Education: Bachelor."
+    ]
+  },
+  "partial_evidence_library": {
+    "product_strategy": [
+      "了解产品规划相关方法。",
+      "熟悉概念：需求洞察与产品策略。",
+      "技能清单：需求分析、产品规划。"
+    ],
+    "ai_literacy": [
+      "参与过基于 LangChain 的知识库问答项目。",
+      "设计过 LLM 提示词并验证输出。",
+      "技能清单：LangChain、LLM。"
+    ],
+    "delivery": [
+      "了解敏捷和项目管理相关方法。",
+      "熟悉概念：跨团队协作与产品交付。",
+      "技能清单：敏捷、项目管理、上线。"
+    ],
+    "outcomes": [
+      "使用 SQL 完成数据分析。",
+      "了解数据驱动与 A/B 测试方法。",
+      "技能清单：SQL、指标、A/B 测试。"
+    ],
+    "business": [
+      "了解用户研究和商业化概念。",
+      "熟悉概念：增长与行业研究。",
+      "技能清单：用户研究、商业化。"
+    ]
+  },
+  "optimization_guard_cases": [
+    {"id":"valid_rewrite","resume":"负责需求分析与项目排期。","original":"负责需求分析与项目排期。","evidence":"负责需求分析与项目排期。","suggested":"负责需求分析、项目排期与协作推进。","expected_valid":true},
+    {"id":"invented_metric","resume":"负责需求分析。","original":"负责需求分析。","evidence":"负责需求分析。","suggested":"负责需求分析，转化率提升 35%。","expected_valid":false},
+    {"id":"invented_technical_skill","resume":"负责知识库产品需求。","original":"负责知识库产品需求。","evidence":"负责知识库产品需求。","suggested":"负责基于 Python 和 LangGraph 的知识库产品需求。","expected_valid":false},
+    {"id":"invented_company","resume":"负责产品规划。","original":"负责产品规划。","evidence":"负责产品规划。","suggested":"在星云科技公司负责产品规划。","expected_valid":false},
+    {"id":"invented_role","resume":"参与需求分析。","original":"参与需求分析。","evidence":"参与需求分析。","suggested":"担任高级产品经理并负责需求分析。","expected_valid":false},
+    {"id":"invented_knowledge_skill","resume":"负责需求分析。","original":"负责需求分析。","evidence":"负责需求分析。","suggested":"负责需求分析与商业化增长。","expected_valid":false}
+  ],
+  "cases": [
+    {"id":"full_canonical","level":"senior","strong":["product_strategy","ai_literacy","delivery","outcomes","business","education"],"partial":[],"variant":0,"expected_total":100,"expected_cap":100,"tags":["happy_path"]},
+    {"id":"full_aliases","level":"senior","strong":["product_strategy","ai_literacy","delivery","outcomes","business","education"],"partial":[],"variant":1,"expected_total":100,"expected_cap":100,"tags":["aliases"]},
+    {"id":"full_alternative","level":"senior","strong":["product_strategy","ai_literacy","delivery","outcomes","business","education"],"partial":[],"variant":2,"expected_total":100,"expected_cap":100,"tags":["paraphrase"]},
+    {"id":"junior_partial","level":"junior","strong":["product_strategy","education"],"partial":["ai_literacy","delivery","business"],"variant":0,"expected_total":58,"expected_cap":100,"tags":["partial"]},
+    {"id":"missing_product_gate","level":"middle","strong":["ai_literacy","delivery","outcomes","business","education"],"partial":[],"variant":0,"expected_total":59,"expected_cap":59,"tags":["hard_gate"]},
+    {"id":"missing_ai_gate","level":"middle","strong":["product_strategy","delivery","outcomes","business","education"],"partial":[],"variant":1,"expected_total":59,"expected_cap":59,"tags":["hard_gate"]},
+    {"id":"missing_both_gates","level":"junior","strong":["delivery","outcomes","business","education"],"partial":[],"variant":2,"expected_total":39,"expected_cap":39,"tags":["hard_gate"]},
+    {"id":"rag_only","level":"middle","strong":["product_strategy","delivery","outcomes","business","education"],"partial":["ai_literacy"],"variant":0,"expected_total":88,"expected_cap":100,"tags":["partial","rag"]},
+    {"id":"llm_only","level":"middle","strong":["product_strategy","delivery","outcomes","business","education"],"partial":["ai_literacy"],"variant":1,"expected_total":88,"expected_cap":100,"tags":["partial","llm"]},
+    {"id":"keyword_stuffing","level":"unknown","strong":["education"],"partial":[],"mentioned":["product_strategy","ai_literacy","delivery","outcomes","business"],"variant":2,"expected_total":5,"expected_cap":39,"tags":["adversarial","keyword_stuffing"]},
+    {"id":"only_hard_gates","level":"junior","strong":["product_strategy","ai_literacy"],"partial":[],"variant":0,"expected_total":50,"expected_cap":100,"tags":["sparse"]},
+    {"id":"delivery_gap","level":"middle","strong":["product_strategy","ai_literacy","outcomes","business","education"],"partial":[],"variant":1,"expected_total":80,"expected_cap":100,"tags":["gap"]},
+    {"id":"outcomes_gap","level":"middle","strong":["product_strategy","ai_literacy","delivery","business","education"],"partial":[],"variant":2,"expected_total":85,"expected_cap":100,"tags":["gap"]},
+    {"id":"business_gap","level":"middle","strong":["product_strategy","ai_literacy","delivery","outcomes","education"],"partial":[],"variant":0,"expected_total":90,"expected_cap":100,"tags":["gap"]},
+    {"id":"education_gap","level":"middle","strong":["product_strategy","ai_literacy","delivery","outcomes","business"],"partial":[],"variant":1,"expected_total":95,"expected_cap":100,"tags":["gap"]},
+    {"id":"mixed_gaps","level":"middle","strong":["product_strategy","ai_literacy","delivery"],"partial":["outcomes","business"],"variant":0,"expected_total":82,"expected_cap":100,"tags":["partial","gap"]},
+    {"id":"data_without_result","level":"middle","strong":["product_strategy","ai_literacy","delivery","business","education"],"partial":["outcomes"],"variant":0,"expected_total":92,"expected_cap":100,"tags":["outcome_validation"]},
+    {"id":"no_evidence","level":"unknown","strong":[],"partial":[],"variant":0,"expected_total":0,"expected_cap":39,"tags":["adversarial","empty"]},
+    {"id":"weak_product_gate","level":"junior","strong":["ai_literacy","delivery","outcomes","business","education"],"partial":["product_strategy"],"variant":0,"expected_total":88,"expected_cap":100,"tags":["partial","hard_gate"]},
+    {"id":"senior_quantified","level":"senior","strong":["product_strategy","ai_literacy","delivery","outcomes","business","education"],"partial":[],"variant":2,"expected_total":100,"expected_cap":100,"tags":["quantified","happy_path"]}
+  ]
+}

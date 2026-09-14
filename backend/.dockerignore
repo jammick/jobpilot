@@ -1,0 +1,13 @@
+.local/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.db
+*.log
+.env
+uploads/
+tests/
+evals/
+requirements-eval.txt
+

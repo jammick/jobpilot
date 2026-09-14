@@ -1,0 +1,23 @@
+{
+  "name": "AI 产品经理能力模型",
+  "role_key": "ai_product_manager",
+  "version": "1.0.0",
+  "role_name": "AI 产品经理",
+  "skills": [
+    {"name": "产品策略", "aliases": ["产品规划", "需求洞察", "需求分析"], "category": "product"},
+    {"name": "RAG", "aliases": ["检索增强生成", "LangChain", "向量数据库", "知识库问答"], "category": "ai"},
+    {"name": "大语言模型", "aliases": ["LLM", "AIGC", "生成式 AI", "GPT"], "category": "ai"},
+    {"name": "产品交付", "aliases": ["项目管理", "跨团队协作", "敏捷", "上线"], "category": "delivery"},
+    {"name": "数据分析", "aliases": ["数据驱动", "指标", "SQL", "A/B 测试"], "category": "data"},
+    {"name": "商业理解", "aliases": ["用户研究", "商业化", "增长", "行业研究"], "category": "business"},
+    {"name": "学历资格", "aliases": ["本科", "硕士", "博士", "bachelor", "master"], "category": "education"}
+  ],
+  "rules": [
+    {"key": "product_strategy", "name": "产品策略与需求洞察", "weight": 25, "required": true, "skills": ["产品策略"], "description": "能定义用户问题、需求优先级与产品方向。"},
+    {"key": "ai_literacy", "name": "LLM/RAG 与 AI 技术理解", "weight": 25, "required": true, "skills": ["RAG", "大语言模型"], "description": "理解大模型能力边界、RAG 或知识库应用。"},
+    {"key": "delivery", "name": "产品交付与跨团队协作", "weight": 20, "required": false, "skills": ["产品交付"], "description": "能推动从需求到上线的协作和交付。"},
+    {"key": "outcomes", "name": "项目成果与量化意识", "weight": 15, "required": false, "skills": ["数据分析"], "description": "能以指标或可验证结果表达项目价值。"},
+    {"key": "business", "name": "用户与商业理解", "weight": 10, "required": false, "skills": ["商业理解"], "description": "理解用户、行业或商业目标。"},
+    {"key": "education", "name": "教育与补充资格", "weight": 5, "required": false, "skills": ["学历资格"], "description": "包含学历或岗位相关资格信息。"}
+  ]
+}
