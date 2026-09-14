@@ -142,7 +142,7 @@ docker compose logs -f backend worker
 
 线上实例默认关闭源仓库自动部署。需要升级版本时，在 Render 的 Blueprint 页面执行 `Manual Sync`，审核变更后再部署。
 
-默认嵌入地址是 `https://api.openai.com/v1`。若使用其他 OpenAI 兼容嵌入服务，请在 Render 环境变量中修改 `EMBEDDING_BASE_URL`、`EMBEDDING_MODEL` 和 `EMBEDDING_DIMENSION`。
+Render 模板默认使用阿里云百炼中国内地（北京）地域：`EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1`、`EMBEDDING_MODEL=text-embedding-v2`、`EMBEDDING_DIMENSION=1536`。部署时填写该地域的百炼 API Key。若 Key 来自新加坡、美国或中国香港地域，必须同时将 Base URL 改成对应地域地址；不同地域的 Key 与接口不能混用。
 
 部署成功后：
 
@@ -211,9 +211,9 @@ JobPilot 将 Chat LLM 与嵌入模型分为两个职责域。
 嵌入配置只由开发者通过 `.env` 管理：
 
 ```env
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_API_KEY=你的百炼_API_Key
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+EMBEDDING_MODEL=text-embedding-v2
 EMBEDDING_DIMENSION=1536
 ```
 

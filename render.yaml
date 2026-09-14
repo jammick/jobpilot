@@ -23,9 +23,9 @@ services:
       - key: EMBEDDING_API_KEY
         sync: false
       - key: EMBEDDING_BASE_URL
-        value: https://api.openai.com/v1
+        value: https://dashscope.aliyuncs.com/compatible-mode/v1
       - key: EMBEDDING_MODEL
-        value: text-embedding-3-small
+        value: text-embedding-v2
       - key: EMBEDDING_DIMENSION
         value: "1536"
       - key: LOCAL_WORKSPACE_MODE
