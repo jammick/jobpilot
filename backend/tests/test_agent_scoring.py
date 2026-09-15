@@ -9,7 +9,14 @@ from app.models import Resume, ResumeChunk, ResumeFact
 from app.schemas.contracts import KnowledgeManifestInput
 from app.services.knowledge import validate_manifest
 from app.services import analysis as analysis_service
-from app.services.analysis import _fallback_jd_profile, _generic_requirements, profile_matches_jd
+from app.services.analysis import (
+    JDProfile,
+    _best_requirement_evidence,
+    _fallback_jd_profile,
+    _generic_requirements,
+    _merge_jd_profiles,
+    profile_matches_jd,
+)
 from app.services.facts import extract_resume_facts
 from app.services.scoring import score_requirements
 
@@ -55,6 +62,26 @@ def test_generic_jd_fallback_extracts_cross_role_skills_without_a_knowledge_pack
     )
     assert {"Python", "SQL", "Docker"}.issubset(profile.required_skills)
     assert "Kubernetes" in profile.preferred_skills
+
+
+def test_sparse_model_jd_profile_keeps_deterministic_requirements():
+    parsed = JDProfile(title="后端工程师", required_skills=["Python"])
+    fallback = JDProfile(
+        required_skills=["SQL"],
+        preferred_skills=["Docker"],
+        responsibilities=["负责支付系统开发"],
+        experience_years=3,
+        education="本科",
+        keywords=["SQL", "Docker"],
+    )
+
+    merged = _merge_jd_profiles(parsed, fallback)
+
+    assert merged.required_skills == ["Python", "SQL"]
+    assert merged.preferred_skills == ["Docker"]
+    assert merged.responsibilities == ["负责支付系统开发"]
+    assert merged.experience_years == 3
+    assert merged.education == "本科"
 
 
 def test_markdown_section_heading_is_not_used_as_job_title():
@@ -145,5 +172,41 @@ def test_generic_requirements_use_traceable_resume_evidence(monkeypatch):
     assert by_name["Python"]["status"] == "matched"
     assert by_name["Python"]["evidence"][0]["quote"] in chunk.content
     assert by_name["SQL"]["status"] == "unmatched"
-    assert all(item["required"] is False for item in requirements)
+    assert by_name["Python"]["required"] is True
+    assert by_name["SQL"]["required"] is True
+    assert by_name["负责数据服务与接口交付"]["required"] is False
     assert round(sum(item["weight"] for item in requirements), 6) == 100
+    report = score_requirements(requirements)
+    assert report["hard_gates"]["missing"] == ["SQL"]
+    assert report["total"] <= 59
+
+
+def test_chunk_similarity_alone_cannot_prove_a_responsibility(monkeypatch):
+    chunk = ResumeChunk(
+        id="chunk-1",
+        resume_id="resume-1",
+        user_id="user-1",
+        content="负责会议组织与资料整理。",
+        embedding=[1.0, 0.0],
+    )
+    monkeypatch.setattr(analysis_service, "embed_query", lambda _: [1.0, 0.0])
+
+    evidence, strength = _best_requirement_evidence("负责支付风控系统架构设计", [chunk])
+
+    assert evidence == []
+    assert strength == "mentioned"
+
+
+def test_broad_responsibility_word_is_only_partial_evidence(monkeypatch):
+    chunk = ResumeChunk(
+        id="chunk-1",
+        resume_id="resume-1",
+        user_id="user-1",
+        content="负责产品资料整理。",
+    )
+    monkeypatch.setattr(analysis_service, "embed_query", lambda _: None)
+
+    evidence, strength = _best_requirement_evidence("负责产品战略与市场定位", [chunk])
+
+    assert evidence
+    assert strength == "weak"

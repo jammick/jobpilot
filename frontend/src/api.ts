@@ -168,6 +168,7 @@ export type Report = {
     mode: "role_profile" | "jd_adaptive";
     role_name: string;
     version: string;
+    engine_version?: string;
     reliability: "specialist" | "adaptive";
     description: string;
   };

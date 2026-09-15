@@ -24,6 +24,7 @@ from app.services.model_config import LLMConfig, system_llm_config, user_llm_con
 
 
 logger = logging.getLogger(__name__)
+SCORING_ENGINE_VERSION = "evidence-v2"
 
 
 class Advice(BaseModel):
@@ -75,6 +76,14 @@ GENERIC_SKILL_TERMS = (
     "项目管理", "产品设计", "交互设计", "视觉设计", "内容策划", "市场分析", "品牌运营",
     "新媒体运营", "供应链", "财务分析", "招聘", "销售", "客户成功", "英语",
 )
+
+# These words are useful for retrieval but too broad to prove that a specific
+# responsibility was performed. A match based only on one of them can be, at
+# most, partial evidence.
+BROAD_RESPONSIBILITY_TERMS = {
+    "用户", "客户", "产品", "项目", "数据", "团队", "工作", "业务", "需求",
+    "方案", "流程", "交付", "研发", "测试", "运营", "营销",
+}
 
 JD_SECTION_HEADINGS = {
     "工作职责", "岗位职责", "职位职责", "工作内容", "职位描述", "岗位描述",
@@ -193,6 +202,25 @@ def _merge_metrics(state: AgentState, delta: dict[str, int]) -> dict[str, int]:
     return merged
 
 
+def _merge_jd_profiles(parsed: JDProfile, fallback: JDProfile) -> JDProfile:
+    """Keep deterministic JD facts when the model returns a sparse profile."""
+    merged = parsed.model_copy(deep=True)
+    merged.required_skills = _unique([*parsed.required_skills, *fallback.required_skills])
+    required_keys = {item.casefold() for item in merged.required_skills}
+    merged.preferred_skills = [
+        item
+        for item in _unique([*parsed.preferred_skills, *fallback.preferred_skills])
+        if item.casefold() not in required_keys
+    ]
+    merged.responsibilities = _unique([*parsed.responsibilities, *fallback.responsibilities])
+    merged.keywords = _unique([*parsed.keywords, *fallback.keywords])
+    if merged.experience_years is None:
+        merged.experience_years = fallback.experience_years
+    if not merged.education:
+        merged.education = fallback.education
+    return merged
+
+
 def _fallback_jd_profile(text: str, aliases: dict[str, str]) -> JDProfile:
     lower = text.lower()
     required: list[str] = []
@@ -291,6 +319,9 @@ def extract_jd_profile_observed(
             parsed.preferred_skills = _clean_jd_values(parsed.preferred_skills)
             parsed.responsibilities = _clean_jd_values(parsed.responsibilities)
             parsed.keywords = _clean_jd_values(parsed.keywords)
+            # The model enriches deterministic extraction; it must not replace
+            # explicit requirements that the local parser already found.
+            parsed = _merge_jd_profiles(parsed, fallback)
             parsed.extraction_mode = "llm"
             return parsed, metrics
         except Exception:
@@ -419,7 +450,8 @@ def normalize(state: AgentState) -> dict:
     scoring_basis = {
         "mode": scoring_mode,
         "role_name": profile.name if profile else (jd_profile.get("title") or "当前岗位 JD"),
-        "version": base.version if base else "JD-ADAPTIVE-1",
+        "version": base.version if base else "JD-ADAPTIVE-2",
+        "engine_version": SCORING_ENGINE_VERSION,
         "reliability": "specialist" if profile else "adaptive",
         "description": (
             "使用已发布的专业岗位能力模型，并结合当前 JD 校准要求。"
@@ -427,7 +459,7 @@ def normalize(state: AgentState) -> dict:
             else "未发现匹配的专业岗位模型，已仅依据当前 JD 建立动态评分项；不会套用 AI 产品经理标准。"
         ),
     }
-    update = {"base_id": base.id if base else None, "base_version": base.version if base else "JD-ADAPTIVE-1", "profile_id": profile.id if profile else None, "rules": rules, "aliases": aliases, "canonical_aliases": canonical_aliases, "jd_profile": jd_profile, "llm_config": llm_config, "metrics": _merge_metrics(state, jd_metrics), "scoring_mode": scoring_mode, "scoring_basis": scoring_basis}
+    update = {"base_id": base.id if base else None, "base_version": base.version if base else "JD-ADAPTIVE-2", "profile_id": profile.id if profile else None, "rules": rules, "aliases": aliases, "canonical_aliases": canonical_aliases, "jd_profile": jd_profile, "llm_config": llm_config, "metrics": _merge_metrics(state, jd_metrics), "scoring_mode": scoring_mode, "scoring_basis": scoring_basis}
     route_detail = f"已选择专业模型「{profile.name}」" if profile else "未命中专业模型，已切换为通用 JD 自适应评分"
     update.update(_trace(state, "normalizing", f"{route_detail}；已提取 {fact_count} 条可回链简历事实，JD 包含 {len(jd_profile['required_skills'])} 项必需能力和 {len(jd_profile['preferred_skills'])} 项优先能力"))
     return update
@@ -472,15 +504,24 @@ def _best_requirement_evidence(
             end = start + len(quote)
             lower = quote.lower()
             lexical = sum(term in lower for term in terms)
-            score = lexical * 1.5 + semantic
-            if lexical or semantic >= 0.48:
+            # Chunk similarity only ranks candidates. A sentence must still
+            # contain a requirement-specific lexical anchor to become evidence;
+            # otherwise every action sentence in a generally similar chunk can
+            # incorrectly satisfy an unrelated responsibility.
+            if lexical:
+                score = lexical * 1.5 + semantic
                 ranked.append((score, chunk, quote, start, end, lexical, semantic))
     ranked.sort(key=lambda item: item[0], reverse=True)
     evidence: list[dict[str, Any]] = []
     strongest = "mentioned"
     for _, chunk, quote, start, end, lexical, semantic in ranked[:2]:
         has_action = any(marker in quote.lower() for marker in ACTION_MARKERS)
-        strength = "strong" if has_action and (lexical >= 1 or semantic >= 0.55) else "weak"
+        quote_lower = quote.lower()
+        specific_hits = [
+            term for term in terms
+            if term not in BROAD_RESPONSIBILITY_TERMS and term in quote_lower
+        ]
+        strength = "strong" if has_action and (specific_hits or lexical >= 2) else "weak"
         if strength == "strong":
             strongest = "strong"
         elif strongest != "strong":
@@ -514,7 +555,9 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
     if not required_skills and not preferred_skills:
         required_skills = _unique(profile.get("keywords", []))[:10]
 
-    def skill_items(skills: list[str], dimension: str) -> list[dict[str, Any]]:
+    def skill_items(
+        skills: list[str], dimension: str, *, required: bool
+    ) -> list[dict[str, Any]]:
         items = []
         for index, skill in enumerate(skills):
             matches = skill_facts.get(skill.lower(), [])
@@ -526,7 +569,7 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
                     "rule_key": f"jd_skill_{dimension}_{index}",
                     "name": skill,
                     "dimension": dimension,
-                    "required": False,
+                    "required": required,
                     "status": status,
                     "evidence": evidence,
                     "skills": [skill],
@@ -536,8 +579,8 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
             )
         return items
 
-    groups.append(("核心技能", 50, skill_items(required_skills, "核心技能")))
-    groups.append(("加分技能", 10, skill_items(preferred_skills, "加分技能")))
+    groups.append(("核心技能", 50, skill_items(required_skills, "核心技能", required=True)))
+    groups.append(("加分技能", 10, skill_items(preferred_skills, "加分技能", required=False)))
 
     responsibility_items = []
     for index, responsibility in enumerate(_unique(profile.get("responsibilities", []))[:6]):
@@ -571,7 +614,7 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
                         "rule_key": "jd_experience",
                         "name": f"{target_years} 年相关经验",
                         "dimension": "经验要求",
-                        "required": False,
+                        "required": True,
                         "status": "matched" if observed >= target_years else "partial" if observed > 0 else "unmatched",
                         "evidence": [_fact_evidence(selected_fact)] if selected_fact else [],
                         "skills": [],
@@ -598,7 +641,7 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
                         "rule_key": "jd_education",
                         "name": str(profile["education"]),
                         "dimension": "学历与资格",
-                        "required": False,
+                        "required": True,
                         "status": "matched" if observed_rank and observed_rank >= target_rank else "partial" if observed_rank else "unmatched",
                         "evidence": [_fact_evidence(selected_fact)] if selected_fact else [],
                         "skills": [],

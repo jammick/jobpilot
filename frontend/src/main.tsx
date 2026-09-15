@@ -1512,7 +1512,7 @@ function ReportView({ r }: { r: Report }) {
           <span>总匹配度</span>
           <strong>{r.total}</strong>
           <small>/ 100</small>
-          <i>信心 {r.confidence ?? "—"}%</i>
+          <i>证据覆盖 {r.confidence ?? "—"}%</i>
         </div>
       </section>
       {r.scoring_basis && (
@@ -1529,6 +1529,9 @@ function ReportView({ r }: { r: Report }) {
             {r.scoring_basis.reliability === "specialist"
               ? "专业岗位模型"
               : "JD 自适应模型"}
+            {r.scoring_basis.engine_version
+              ? ` · ${r.scoring_basis.engine_version}`
+              : ""}
           </span>
         </section>
       )}
