@@ -3706,19 +3706,28 @@ a {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.rewrite-pair del,
-.rewrite-pair ins {
+.rewrite-card {
   padding: 11px;
   border-radius: 12px;
-  text-decoration: none;
-  font-size: 9px;
-  line-height: 1.65;
 }
-.rewrite-pair del {
+.rewrite-card > span {
+  display: block;
+  margin-bottom: 7px;
+  font: 700 10px/1.2 var(--sans);
+  letter-spacing: 0.04em;
+}
+.rewrite-pair del,
+.rewrite-pair ins {
+  display: block;
+  text-decoration: none;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.rewrite-card.before {
   background: #fff1ee;
   color: #945e56;
 }
-.rewrite-pair ins {
+.rewrite-card.after {
   background: #edf6e1;
   color: #496b35;
 }
@@ -4265,8 +4274,8 @@ a {
 .targeted-changes blockquote,
 .rewrite-pair del,
 .rewrite-pair ins {
-  font-size: 12px;
-  line-height: 1.7;
+  font-size: 13px;
+  line-height: 1.75;
 }
 
 .change-actions button,

@@ -1927,8 +1927,14 @@ function Result() {
                             <p>{change.rationale}</p>
                             <blockquote>原文证据：“{change.evidence_quote}”</blockquote>
                             <div className="rewrite-pair">
-                              <del>{change.original_text}</del>
-                              <ins>{change.suggested_text}</ins>
+                              <div className="rewrite-card before">
+                                <span>优化前</span>
+                                <del>{change.original_text}</del>
+                              </div>
+                              <div className="rewrite-card after">
+                                <span>优化后 · 针对当前 JD</span>
+                                <ins>{change.suggested_text}</ins>
+                              </div>
                             </div>
                             <div className="change-actions">
                               <button

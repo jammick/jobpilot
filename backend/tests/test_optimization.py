@@ -94,3 +94,22 @@ def test_optimization_guard_rejects_new_facts():
     assert "introduced_technical_term" in violations
     assert "introduced_named_fact" in violations
     assert "introduced_knowledge_skill" in violations
+
+
+@pytest.mark.parametrize(
+    ("suggested", "expected"),
+    [
+        ("负责需求分析。", True),
+        ("  负责需求分析  ", True),
+        ("负责需求分析！", True),
+        ("负责需求分析与优先级梳理。", False),
+    ],
+)
+def test_optimization_guard_rejects_unchanged_or_cosmetic_rewrites(suggested, expected):
+    violations = optimization_change_violations(
+        "负责需求分析。参与项目管理。",
+        "负责需求分析。",
+        suggested,
+        "负责需求分析。",
+    )
+    assert ("unchanged_text" in violations) is expected
