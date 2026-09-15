@@ -24,7 +24,7 @@ from app.services.model_config import LLMConfig, system_llm_config, user_llm_con
 
 
 logger = logging.getLogger(__name__)
-SCORING_ENGINE_VERSION = "evidence-v2"
+SCORING_ENGINE_VERSION = "evidence-v3"
 
 
 class Advice(BaseModel):
@@ -75,6 +75,7 @@ GENERIC_SKILL_TERMS = (
     "AWS", "Git", "Linux", "FastAPI", "Django", "Spring", "数据分析", "用户研究", "需求分析",
     "项目管理", "产品设计", "交互设计", "视觉设计", "内容策划", "市场分析", "品牌运营",
     "新媒体运营", "供应链", "财务分析", "招聘", "销售", "客户成功", "英语",
+    "Agent", "Tool", "MCP", "Skills", "Subagent", "Prompt",
 )
 
 # These words are useful for retrieval but too broad to prove that a specific
@@ -98,6 +99,17 @@ ROLE_TITLE_MARKERS = re.compile(
     r"助理|实习生|架构师|测试|开发|研究员|developer|engineer|manager|designer|"
     r"analyst|specialist|consultant|director|architect|researcher",
     re.IGNORECASE,
+)
+
+JD_DUTY_MARKERS = (
+    "负责", "职责", "协助", "完成", "参与", "推动", "设计", "开发", "联调",
+    "集成", "编写", "调试", "调优", "构建", "实现", "维护", "优化",
+    "responsib", "develop", "build", "implement", "maintain", "own",
+)
+
+HARD_REQUIREMENT_MARKERS = (
+    "必须", "要求", "至少", "需具备", "应具备", "精通", "熟练掌握", "硬性",
+    "must", "required", "mandatory", "at least",
 )
 
 
@@ -124,6 +136,18 @@ def _is_jd_section_heading(value: str | None) -> bool:
     }
 
 
+def _is_plausible_jd_title(value: str | None) -> bool:
+    cleaned = _clean_jd_label(value)
+    if not cleaned or _is_jd_section_heading(cleaned) or len(cleaned) > 60:
+        return False
+    lower = cleaned.lower()
+    # A short title such as “软件开发工程师” may contain 开发. Long action
+    # statements such as “协助完成……开发与联调” are responsibilities, not titles.
+    if len(cleaned) > 24 and any(marker in lower for marker in JD_DUTY_MARKERS):
+        return False
+    return bool(ROLE_TITLE_MARKERS.search(cleaned))
+
+
 def _infer_jd_title(text: str) -> str:
     """Prefer an explicit job-title field; never promote a section heading."""
     for raw_line in text.splitlines()[:24]:
@@ -134,16 +158,13 @@ def _infer_jd_title(text: str) -> str:
         )
         if labelled:
             candidate = _clean_jd_label(labelled.group(1))[:160]
-            if candidate and not _is_jd_section_heading(candidate):
+            if _is_plausible_jd_title(candidate):
                 return candidate
 
     for raw_line in text.splitlines()[:24]:
         candidate = _clean_jd_label(raw_line)[:160]
         if (
-            candidate
-            and len(candidate) <= 80
-            and not _is_jd_section_heading(candidate)
-            and ROLE_TITLE_MARKERS.search(candidate)
+            _is_plausible_jd_title(candidate)
         ):
             return candidate
     return ""
@@ -254,6 +275,30 @@ def _fallback_jd_profile(text: str, aliases: dict[str, str]) -> JDProfile:
         target = preferred if any(marker in context for marker in preferred_markers) else required
         target.append(canonical)
 
+    # Preserve explicit product/technology tokens even when no specialist
+    # knowledge package exists. Capitalized names and acronyms are common in
+    # Chinese JDs (MCP, Subagent, Prompt, Kubernetes, etc.).
+    english_stop = {
+        "and", "or", "the", "with", "for", "from", "to", "of", "in", "on",
+        "job", "work", "role", "required", "preferred", "responsibilities",
+        "requirements", "skills", "experience", "years", "about", "our",
+    }
+    for match in re.finditer(r"\b[A-Za-z][A-Za-z0-9+.#/-]{1,30}\b", text):
+        token = match.group(0).strip("/.-")
+        if not token or token.lower() in english_stop:
+            continue
+        looks_named = token.isupper() or any(char.isupper() for char in token[1:]) or token[0].isupper()
+        if not looks_named or token in required or token in preferred:
+            continue
+        separators = ("\n", "。", "；", ";", ".")
+        position = match.start()
+        left = max((lower.rfind(separator, 0, position) for separator in separators), default=-1) + 1
+        right_candidates = [lower.find(separator, position + len(match.group(0))) for separator in separators]
+        right = min((candidate for candidate in right_candidates if candidate >= 0), default=len(lower))
+        context = lower[left:right]
+        target = preferred if any(marker in context for marker in preferred_markers) else required
+        target.append(token)
+
     years_match = re.search(r"(\d{1,2})\s*(?:年|years?)", lower)
     education_match = re.search(r"本科|硕士|博士|大专|bachelor|master|phd", lower)
     lines = [_clean_jd_label(line) for line in text.splitlines() if line.strip()]
@@ -262,7 +307,7 @@ def _fallback_jd_profile(text: str, aliases: dict[str, str]) -> JDProfile:
         for line in lines
         if line
         and not _is_jd_section_heading(line)
-        and any(marker in line.lower() for marker in ("负责", "职责", "推动", "设计", "responsib", "own"))
+        and any(marker in line.lower() for marker in JD_DUTY_MARKERS)
     ][:12]
     return JDProfile(
         title=_infer_jd_title(text),
@@ -313,7 +358,7 @@ def extract_jd_profile_observed(
             metrics["output_tokens"] += usage["output_tokens"]
             parsed = JDProfile.model_validate(JsonOutputParser().invoke(message))
             parsed.title = _clean_jd_label(parsed.title)
-            if not parsed.title or _is_jd_section_heading(parsed.title):
+            if not _is_plausible_jd_title(parsed.title):
                 parsed.title = fallback.title
             parsed.required_skills = _clean_jd_values(parsed.required_skills)
             parsed.preferred_skills = _clean_jd_values(parsed.preferred_skills)
@@ -450,7 +495,7 @@ def normalize(state: AgentState) -> dict:
     scoring_basis = {
         "mode": scoring_mode,
         "role_name": profile.name if profile else (jd_profile.get("title") or "当前岗位 JD"),
-        "version": base.version if base else "JD-ADAPTIVE-2",
+        "version": base.version if base else "JD-ADAPTIVE-3",
         "engine_version": SCORING_ENGINE_VERSION,
         "reliability": "specialist" if profile else "adaptive",
         "description": (
@@ -459,7 +504,7 @@ def normalize(state: AgentState) -> dict:
             else "未发现匹配的专业岗位模型，已仅依据当前 JD 建立动态评分项；不会套用 AI 产品经理标准。"
         ),
     }
-    update = {"base_id": base.id if base else None, "base_version": base.version if base else "JD-ADAPTIVE-2", "profile_id": profile.id if profile else None, "rules": rules, "aliases": aliases, "canonical_aliases": canonical_aliases, "jd_profile": jd_profile, "llm_config": llm_config, "metrics": _merge_metrics(state, jd_metrics), "scoring_mode": scoring_mode, "scoring_basis": scoring_basis}
+    update = {"base_id": base.id if base else None, "base_version": base.version if base else "JD-ADAPTIVE-3", "profile_id": profile.id if profile else None, "rules": rules, "aliases": aliases, "canonical_aliases": canonical_aliases, "jd_profile": jd_profile, "llm_config": llm_config, "metrics": _merge_metrics(state, jd_metrics), "scoring_mode": scoring_mode, "scoring_basis": scoring_basis}
     route_detail = f"已选择专业模型「{profile.name}」" if profile else "未命中专业模型，已切换为通用 JD 自适应评分"
     update.update(_trace(state, "normalizing", f"{route_detail}；已提取 {fact_count} 条可回链简历事实，JD 包含 {len(jd_profile['required_skills'])} 项必需能力和 {len(jd_profile['preferred_skills'])} 项优先能力"))
     return update
@@ -486,6 +531,21 @@ def _requirement_terms(text: str) -> list[str]:
         if term.lower() in lower:
             terms.add(term.lower())
     return sorted(terms, key=len, reverse=True)
+
+
+def _is_explicit_hard_requirement(skill: str, job_description: str) -> bool:
+    """Only explicit must-language activates the severe 59/39 score cap."""
+    lower = job_description.lower()
+    needle = skill.lower()
+    position = lower.find(needle)
+    if position < 0:
+        return False
+    separators = ("\n", "。", "；", ";", ".")
+    left = max((lower.rfind(separator, 0, position) for separator in separators), default=-1) + 1
+    right_candidates = [lower.find(separator, position + len(needle)) for separator in separators]
+    right = min((candidate for candidate in right_candidates if candidate >= 0), default=len(lower))
+    context = lower[left:right]
+    return any(marker in context for marker in HARD_REQUIREMENT_MARKERS)
 
 
 def _best_requirement_evidence(
@@ -545,6 +605,7 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
     profile = state["jd_profile"]
     facts = db.query(ResumeFact).filter_by(resume_id=resume.id).all()
     skill_facts: dict[str, list[ResumeFact]] = {}
+    job_description = state.get("analysis").job_description if state.get("analysis") else ""
     for fact in facts:
         if fact.fact_type == "skill":
             skill_facts.setdefault(fact.value.lower(), []).append(fact)
@@ -569,7 +630,7 @@ def _generic_requirements(state: AgentState, chunks: list[ResumeChunk]) -> list[
                     "rule_key": f"jd_skill_{dimension}_{index}",
                     "name": skill,
                     "dimension": dimension,
-                    "required": required,
+                    "required": required and _is_explicit_hard_requirement(skill, job_description),
                     "status": status,
                     "evidence": evidence,
                     "skills": [skill],

@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.database import Base
-from app.models import Resume, ResumeChunk, ResumeFact
+from app.models import Analysis, Resume, ResumeChunk, ResumeFact
 from app.schemas.contracts import KnowledgeManifestInput
 from app.services.knowledge import validate_manifest
 from app.services import analysis as analysis_service
@@ -102,6 +102,66 @@ def test_markdown_job_title_is_cleaned_but_preserved():
     assert all(not item.startswith("#") for item in profile.responsibilities)
 
 
+def test_action_statement_is_a_responsibility_not_a_job_title():
+    jd = "协助完成 Agent 相关模块的开发与联调（Tool / MCP 集成、Skills 编写、Subagent 调试、Prompt 调优、评测用例构建等）"
+
+    profile = _fallback_jd_profile(jd, {})
+
+    assert profile.title == ""
+    assert jd in profile.responsibilities
+    assert {"Agent", "Tool", "MCP", "Skills", "Subagent", "Prompt"}.issubset(profile.required_skills)
+
+
+def test_agent_duty_jd_keeps_unmatched_listed_technologies(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    jd = "协助完成 Agent 相关模块的开发与联调（Tool / MCP 集成、Skills 编写、Subagent 调试、Prompt 调优、评测用例构建等）"
+    profile = _fallback_jd_profile(jd, {})
+    resume = Resume(
+        user_id="test-user",
+        original_name="agent.pdf",
+        storage_name="agent.pdf",
+        content="使用 Agent 构建 MCP 集成模块，并调优 Prompt。",
+    )
+    db.add(resume)
+    db.flush()
+    chunk = ResumeChunk(resume_id=resume.id, user_id=resume.user_id, content=resume.content)
+    db.add(chunk)
+    db.flush()
+    aliases = {skill.lower(): skill for skill in profile.required_skills}
+    for fact in extract_resume_facts(chunk.content, aliases):
+        db.add(
+            ResumeFact(
+                resume_id=resume.id,
+                fact_type=fact.fact_type,
+                value=fact.value,
+                source_chunk_id=chunk.id,
+                source_quote=fact.quote,
+                char_start=fact.char_start,
+                char_end=fact.char_end,
+                strength=fact.strength,
+                details=fact.details,
+            )
+        )
+    db.flush()
+    monkeypatch.setattr(analysis_service, "embed_query", lambda _: None)
+
+    requirements = _generic_requirements(
+        {
+            "db": db,
+            "resume": resume,
+            "analysis": Analysis(job_description=jd),
+            "jd_profile": profile.model_dump(),
+        },
+        [chunk],
+    )
+    report = score_requirements(requirements)
+
+    assert report["total"] < 100
+    assert {"Tool", "Skills", "Subagent"}.issubset(report["missing_keywords"])
+
+
 def test_auto_router_does_not_apply_ai_product_manager_profile_to_other_jobs():
     assert profile_matches_jd("ai_product_manager", "AI 产品经理", "AI 产品经理：负责 RAG 产品规划")
     assert not profile_matches_jd("ai_product_manager", "AI 产品经理", "Java 后端工程师：负责支付系统开发")
@@ -157,6 +217,7 @@ def test_generic_requirements_use_traceable_resume_evidence(monkeypatch):
         {
             "db": db,
             "resume": resume,
+            "analysis": Analysis(job_description="必须掌握 Python 与 SQL；负责数据服务与接口交付"),
             "jd_profile": {
                 "required_skills": ["Python", "SQL"],
                 "preferred_skills": [],
